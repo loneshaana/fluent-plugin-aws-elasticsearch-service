@@ -4,10 +4,10 @@ lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 Gem::Specification.new do |spec|
-  spec.name          = "fluent-plugin-aws-elasticsearch-service"
+  spec.name          = "fluent-plugin-aws-elasticsearch-service-revamp"
   spec.version       = "2.4.0"
-  spec.authors       = ["atomita"]
-  spec.email         = ["sleeping.cait.sith+gh@gmail.com"]
+  spec.authors       = ["anwar"]
+  spec.email         = ["anwarulhaq794@gmail.com"]
 
   spec.summary       = %q{Output plugin to post to "Amazon Elasticsearch Service".}
   spec.description   = %q{this is a Output plugin. Post to "Amazon Elasticsearch Service".}

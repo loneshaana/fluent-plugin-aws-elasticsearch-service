@@ -15,6 +15,7 @@ module Fluent::Plugin
       config_param :region, :string
       config_param :url, :string
       config_param :access_key_id, :string, :default => ""
+      config_param :session_token, :string, :default => "",secret:true
       config_param :secret_access_key, :string, :default => "", secret: true
       config_param :assume_role_arn, :string, :default => nil
       config_param :ecs_container_credentials_relative_uri, :string, :default => nil #Set with AWS_CONTAINER_CREDENTIALS_RELATIVE_URI environment variable value
@@ -77,7 +78,7 @@ module Fluent::Plugin
       calback = lambda do
         credentials = nil
         unless opts[:access_key_id].empty? or opts[:secret_access_key].empty?
-          credentials = Aws::Credentials.new opts[:access_key_id], opts[:secret_access_key]
+          credentials = Aws::Credentials.new opts[:access_key_id], opts[:secret_access_key],opts[:session_token]
         else
           if opts[:assume_role_arn].nil?
             aws_container_credentials_relative_uri = opts[:ecs_container_credentials_relative_uri] || ENV["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"]
