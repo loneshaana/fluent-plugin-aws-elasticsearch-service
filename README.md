@@ -149,3 +149,7 @@ Bug reports and pull requests are welcome on GitHub at https://github.com/atomit
 
 The gem is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
 
+curl -L https://toolbelt.treasuredata.com/sh/install-ubuntu-trusty-td-agent2.sh | sh
+sudo apt-get install build-essential -y
+sudo td-agent-gem install fluent-plugin-aws-elasticsearch-service-revamp -v 1.1.6
+// install gems from s3

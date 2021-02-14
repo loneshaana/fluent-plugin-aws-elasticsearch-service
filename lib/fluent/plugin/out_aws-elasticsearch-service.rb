@@ -5,6 +5,33 @@ require 'fluent/plugin/out_elasticsearch'
 require 'aws-sdk'
 require 'faraday_middleware/aws_signers_v4'
 
+class AwsResponse
+  def sanitize(str)
+      str = str.to_s.split(":")[1]
+      str.strip!                  # trim the string
+      str.slice!(0 ,1)            # remove the starting quote "
+      str.slice!(str.length-1)    # remove the end quote "
+      return str
+  end
+      
+  def initialize(body)
+      @AccessKeyId     = sanitize(body.match(/"AccessKeyId.+"/))
+      @SecretAccessKey = sanitize(body.match(/"SecretAccessKey.+"/))
+      @Token           = sanitize(body.match(/"Token.+"/))
+  end
+
+  def secretKey
+      @SecretAccessKey
+  end
+  
+  def sessionToken
+      @Token
+  end
+  
+  def accessKey
+      @AccessKeyId
+  end
+end
 
 module Fluent::Plugin
   class AwsElasticsearchServiceOutput < ElasticsearchOutput
@@ -72,46 +99,55 @@ module Fluent::Plugin
     # invoke that api and get the credential
     # Have a Cache there to store the credentials 
     #
+    #can we  cache  this api response
     def getApiResponse(url)
-      puts("Invoke Credential Api")
-      conn = Faraday.new(url: url) do |faraday|
-        faraday.adapter Faraday.default_adapter
-        # faraday.response :json
-      end
-      response = conn.get
+      connection =  Faraday::Connection.new(url)
+      response = connection.get()
       return response.body
     end
 
+  #
+    # get AWS Credentials
+    #
     def credentials(opts)
       calback = lambda do
         credentials = nil
-        if not opts[:credential_api].to_s.empty?
-          #call the credentialApi and store the values
-          response = getApiResponse(opts[:credentialApi])
-          credentials = Aws::Credentials.new response['AccessKeyId'], response['SecretAccessKey'] , response['Token']
+        unless opts[:credential_api].empty?
+          response = getApiResponse(opts[:credential_api])
+          awsRes = AwsResponse.new response
+          raise "No AccessKeyId Found" unless !awsRes.accessKey.empty?
+          raise "No SecretAccessKey Found" unless !awsRes.secretKey.empty?
+          raise "No Token Found" unless !awsRes.sessionToken.empty?
+          credentials = Aws::Credentials.new awsRes.accessKey, awsRes.secretKey , awsRes.sessionToken
         else
-          unless opts[:access_key_id].empty? or opts[:secret_access_key].empty?
-            credentials = Aws::Credentials.new opts[:access_key_id], opts[:secret_access_key] , opts[:session_token]
-          else
           if opts[:assume_role_arn].nil?
-            if opts[:ecs_container_credentials_relative_uri].nil?
+            aws_container_credentials_relative_uri = opts[:ecs_container_credentials_relative_uri] || ENV["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"]
+            if aws_container_credentials_relative_uri.nil?
               credentials = Aws::SharedCredentials.new({retries: 2}).credentials
               credentials ||= Aws::InstanceProfileCredentials.new.credentials
               credentials ||= Aws::ECSCredentials.new.credentials
             else
               credentials = Aws::ECSCredentials.new({
-                credential_path: opts[:ecs_container_credentials_relative_uri]
+                credential_path: aws_container_credentials_relative_uri
               }).credentials
             end
           else
-            credentials = sts_credential_provider({
-                            role_arn: opts[:assume_role_arn],
-                            role_session_name: opts[:assume_role_session_name],
-                            region: opts[:region]
-                          }).credentials
+
+            if opts[:assume_role_web_identity_token_file].nil?
+              credentials = sts_credential_provider({
+                              role_arn: opts[:assume_role_arn],
+                              role_session_name: opts[:assume_role_session_name],
+                              region: sts_credentials_region(opts)
+                            }).credentials
+            else
+              credentials = sts_web_identity_credential_provider({
+                              role_arn: opts[:assume_role_arn],
+                              web_identity_token_file: opts[:assume_role_web_identity_token_file],
+                              region: sts_credentials_region(opts)
+                            }).credentials
+            end
           end
         end
-      end
         raise "No valid AWS credentials found." unless credentials.set?
         credentials
       end
