@@ -14,7 +14,9 @@ module Fluent::Plugin
     config_section :endpoint do
       config_param :region, :string
       config_param :url, :string
+      config_param :credential_api, :string, :default => ""
       config_param :access_key_id, :string, :default => ""
+      config_param :session_token, :string, :default => ""
       config_param :secret_access_key, :string, :default => ""
       config_param :assume_role_arn, :string, :default => nil
       config_param :ecs_container_credentials_relative_uri, :string, :default => nil #Set with AWS_CONTAINER_CREDENTIALS_RELATIVE_URI environment variable value
@@ -66,13 +68,31 @@ module Fluent::Plugin
 
     #
     # get AWS Credentials
+    # get the credential Api from config
+    # invoke that api and get the credential
+    # Have a Cache there to store the credentials 
     #
+    def getApiResponse(url)
+      puts("Invoke Credential Api")
+      conn = Faraday.new(url: url) do |faraday|
+        faraday.adapter Faraday.default_adapter
+        # faraday.response :json
+      end
+      response = conn.get
+      return response.body
+    end
+
     def credentials(opts)
       calback = lambda do
         credentials = nil
-        unless opts[:access_key_id].empty? or opts[:secret_access_key].empty?
-          credentials = Aws::Credentials.new opts[:access_key_id], opts[:secret_access_key]
+        if not opts[:credential_api].to_s.empty?
+          #call the credentialApi and store the values
+          response = getApiResponse(opts[:credentialApi])
+          credentials = Aws::Credentials.new response['AccessKeyId'], response['SecretAccessKey'] , response['Token']
         else
+          unless opts[:access_key_id].empty? or opts[:secret_access_key].empty?
+            credentials = Aws::Credentials.new opts[:access_key_id], opts[:secret_access_key] , opts[:session_token]
+          else
           if opts[:assume_role_arn].nil?
             if opts[:ecs_container_credentials_relative_uri].nil?
               credentials = Aws::SharedCredentials.new({retries: 2}).credentials
@@ -91,6 +111,7 @@ module Fluent::Plugin
                           }).credentials
           end
         end
+      end
         raise "No valid AWS credentials found." unless credentials.set?
         credentials
       end
